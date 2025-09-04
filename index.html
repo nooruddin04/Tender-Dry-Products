@@ -289,7 +289,7 @@
       //document.getElementById("shippingInfo").innerText = (pin ? "Shipping rule not found for this pincode; default shipping will apply" : "Enter pincode to calculate shipping");
     }
     const subtotal = getSubtotal();
-    document.getElementById("subtotal").innerText = subtotal.toFixed(0);
+    //document.getElementById("subtotal").innerText = subtotal.toFixed(0);
     const grand = subtotal + shipping;
     document.getElementById("grandTotal").innerText = grand.toFixed(0);
   }
