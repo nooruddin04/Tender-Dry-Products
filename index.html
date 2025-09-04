@@ -286,7 +286,7 @@
       shipping = Number(SHIPPING[pin]);
       document.getElementById("shippingInfo").innerText = "Shipping: ₹" + shipping.toFixed(0) + " (based on pincode rules)";
     } else {
-      document.getElementById("shippingInfo").innerText = (pin ? "Shipping rule not found for this pincode; default shipping will apply" : "Enter pincode to calculate shipping");
+      //document.getElementById("shippingInfo").innerText = (pin ? "Shipping rule not found for this pincode; default shipping will apply" : "Enter pincode to calculate shipping");
     }
     const subtotal = getSubtotal();
     document.getElementById("subtotal").innerText = subtotal.toFixed(0);
