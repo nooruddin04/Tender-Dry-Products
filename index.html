@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Tender Dry Products — Store</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    /* minimal, clean styling */
+    :root{--accent:#1f7a6b;--muted:#666}
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial; margin:0;background:#f7f7f9;color:#111}
+    header{background:linear-gradient(90deg,#fff 0,#f0fdf9 100%);padding:18px 20px;box-shadow:0 2px 6px rgba(0,0,0,0.04)}
+    h1{margin:0;font-size:20px}
+    main{max-width:980px;margin:22px auto;padding:0 16px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+    .card{background:#fff;border-radius:10px;padding:12px;box-shadow:0 1px 4px rgba(0,0,0,0.06)}
+    img.prod{width:100%;height:150px;object-fit:contain;background:#fff;border-radius:8px}
+    .price{font-weight:700;margin-top:8px}
+    .sm{font-size:13px;color:var(--muted)}
+    .btn{background:var(--accent);color:#fff;padding:8px 12px;border:none;border-radius:8px;cursor:pointer}
+    .btn:disabled{opacity:.5}
+    #cart{position:fixed;right:18px;bottom:18px;background:var(--accent);color:#fff;padding:12px;border-radius:12px;box-shadow:0 6px 14px rgba(0,0,0,0.12)}
+    #checkoutModal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.4)}
+    .modal{background:#fff;padding:18px;border-radius:10px;width:360px;max-width:92%}
+    label{display:block;font-size:13px;margin-top:8px;color:var(--muted)}
+    input[type="text"],input[type="number"],select{width:100%;padding:8px;border-radius:6px;border:1px solid #ddd;margin-top:6px}
+    .row{display:flex;gap:8px}
+    .row > *{flex:1}
+    footer{max-width:980px;margin:24px auto;text-align:center;color:#666;font-size:13px}
+  </style>
+</head>
+<body>
+  <header>
+    <div style="display:flex;align-items:center;gap:12px">
+      <h1>Tender Dry Products — Online Shop</h1>
+    </div>
+  </header>
+
+  <main>
+    <section>
+      <h2>Products</h2>
+      <div id="products" class="grid"></div>
+      <p class="sm" id="loadingNote">Loading products…</p>
+    </section>
+
+    <section style="margin-top:18px;">
+      <h2>Your Cart</h2>
+      <div id="cartContents" class="card sm">Cart is empty</div>
+    </section>
+  </main>
+
+  <button id="cart" title="Open Cart">Cart (<span id="cartCount">0</span>) ₹<span id="cartTotal">0</span></button>
+
+  <div id="checkoutModal">
+    <div class="modal">
+      <h3>Checkout</h3>
+
+      <label for="custName">Name</label>
+      <input id="custName" type="text" placeholder="Full name" />
+
+      <label for="custPhone">Whatsapp number</label>
+      <input id="custPhone" type="text" placeholder="Mobile number" />
+
+      <label for="custPincode">Pincode</label>
+      <input id="custPincode" type="text" placeholder="6 digit pincode" />
+
+      <div class="row" style="margin-top:8px">
+        <!--<div>
+          <label for="paymentMethod">Payment method</label>
+          <select id="paymentMethod">-->
+            <!-- COD availability toggled by JS variable below -->
+            <!--<option value="razorpay">Online (Razorpay)</option>
+            <option value="cod">Cash on Delivery (COD)</option>
+          </select>
+        </div>-->
+        <div>
+          <label>Complete address</label>
+          <input id="orderNote" type="textarea" placeholder="Write complete delivery address	" />
+        </div>
+      </div>
+
+      <!--<p class="sm" id="shippingInfo">Shipping: -</p>
+      <p class="sm">Subtotal: ₹<span id="subtotal">0</span></p>-->
+      <p style="font-weight:700">Total (shipping charges not included): ₹<span id="grandTotal">0</span></p>
+ <p class="sm" style="margin-top:8px">Total amount including shipping charges and all other details will be shared with you once you place the order</p>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn" id="placeOrderBtn">Place order</button>
+        <button class="btn" id="closeModal" style="background:#ccc;color:#111">Cancel</button>
+      </div>     
+    </div>
+  </div>
+
+  <!-- Razorpay checkout library (loaded only if using Razorpay) -->
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+
+  <script>
+  /***********************
+   * CONFIG — EDIT THESE
+   ***********************/
+  const SHEET_ID = "1lEPZE5-HM0PwVuBkcu1mVK0rtFrOpaHyJxB1cwHLgKw"; // <<--- REPLACE: Google Sheet ID (from sheet URL)
+  const PRODUCTS_TAB = "Products";   // Tab name for products
+  const SHIPPING_TAB = "ShippingRules"; // Tab for pincode->shipping
+  // For COD orders: create a Google Form for orders and get the form POST URL & entry IDs
+  // (when you create the form, look at the form HTML and find input names like "entry.123456")
+  const ORDER_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSfr2xwRQnjKxZss8WU120pEa2rIWVEyss9HrEhT0OJ0WiFwfg/formResponse"; // e.g. https://docs.google.com/forms/d/e/XXX/formResponse
+  const ORDER_FORM_ENTRIES = {
+    name: "entry.484117143",
+    phone: "entry.614192061",
+    pincode: "entry.1004187696",
+    items: "entry.715010398",
+    subtotal: "entry.2018662128",
+    shipping: "entry.1688073996",
+    total: "entry.1570062941",
+    payment_method: "entry.1537714771",
+    note: "entry.1770227499"
+  };
+
+  // Razorpay (online payment)
+  const RAZORPAY_KEY_ID = "YOUR_RAZORPAY_KEY_ID"; // replace with your key id
+  // You should create a Google Apps Script Web App to create Razorpay Orders (serverless, free)
+  // Put that web app URL here; the client will call it with order data and it will return {id: "...", amount: ...}
+  const APPS_SCRIPT_CREATE_ORDER_URL = "YOUR_APPS_SCRIPT_CREATE_ORDER_URL";
+
+  // Toggle COD availability on site (true = show COD option; false = only online)
+  const COD_ENABLED = true;
+
+  /***********************
+   * END CONFIG
+   ***********************/
+
+  // Helper URLs to fetch sheet via opensheet.elk.sh
+  const productsUrl = `https://opensheet.elk.sh/${SHEET_ID}/${encodeURIComponent(PRODUCTS_TAB)}`;
+  const shippingUrl = `https://opensheet.elk.sh/${SHEET_ID}/${encodeURIComponent(SHIPPING_TAB)}`;
+
+  // Basic client-side cart
+  let PRODUCTS = []; // loaded from sheet
+  let SHIPPING = {}; // map pincode->shipping
+  let CART = {};     // product_id -> qty
+
+  // Init
+  document.addEventListener("DOMContentLoaded", init);
+  function init(){
+   if(!SHEET_ID || SHEET_ID === "YOUR_SHEET_ID"){ alert("Please edit index.html: set SHEET_ID to your Google Sheet ID and reload."); }
+    if(!ORDER_FORM_URL || ORDER_FORM_URL === "YOUR_GOOGLE_FORM_POST_URL"){ /* it's OK: COD will fail until configured */ }
+    if(!RAZORPAY_KEY_ID || RAZORPAY_KEY_ID === "YOUR_RAZORPAY_KEY_ID"){ /* will block proper online payments until set */ }
+
+    // hide/show COD option
+    const pm = document.getElementById("paymentMethod");
+    if(!COD_ENABLED){
+      for(let i=0;i<pm.options.length;i++){
+        if(pm.options[i].value==="cod") pm.remove(i);
+      }
+    }
+
+    fetchData();
+    document.getElementById("cart").addEventListener("click", () => openCheckout());
+    document.getElementById("closeModal").addEventListener("click", closeCheckout);
+    document.getElementById("placeOrderBtn").addEventListener("click", placeOrder);
+    document.getElementById("custPincode").addEventListener("input", updateShippingOnPincode);
+  }
+
+  async function fetchData(){
+    try{
+      const [pRes, sRes] = await Promise.all([fetch(productsUrl), fetch(shippingUrl)]);
+      const pJson = await pRes.json();
+      const sJson = await sRes.json();
+      // opensheet returns array of rows
+      PRODUCTS = pJson.map(r => ({
+        product_id: r.product_id || r.id || r.ID || r.sku || (r.name && r.name.toLowerCase().replace(/\s+/g,'_')),
+        name: r.name || "",
+        description: r.description || "",
+        price: Number(r.price || r.Price || 0),
+        stock: Number(r.stock || r.stock_count || r.Stock || 0),
+        image_url: r.image_url || r.image || "",
+        weight_g: Number(r.weight_g || r.weight || 0)
+      }));
+      // shipping rules to map
+      SHIPPING = {};
+      sJson.forEach(r => {
+        if(r.pincode){ SHIPPING[r.pincode.trim()] = Number(r.shipping_charge || r.charge || r.shipping || 0) }
+      });
+
+      renderProducts();
+      document.getElementById("loadingNote").style.display = "none";
+    }catch(err){
+      console.error(err);
+      alert("Failed to load sheet data. Make sure your Sheet is public/published and SHEET_ID is correct.");
+    }
+  }
+
+  function renderProducts(){
+    const container = document.getElementById("products");
+    container.innerHTML = "";
+    PRODUCTS.forEach(p => {
+      const div = document.createElement("div");
+      div.className = "card";
+      div.innerHTML = `
+        <img class="prod" src="${p.image_url || 'https://via.placeholder.com/300x150?text=No+Image'}" alt="${escapeHtml(p.name)}" />
+        <div style="margin-top:8px">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <div style="font-weight:600">${escapeHtml(p.name)}</div>
+              <div class="sm">${escapeHtml(p.description || '')}</div>
+            </div>
+            <div style="text-align:right">
+              <div class="price">₹${Number(p.price).toFixed(0)}</div>
+              <div class="sm">Stock: ${p.stock}</div>
+            </div>
+          </div>
+          <div style="margin-top:8px;display:flex;gap:8px">
+            <input type="number" min="1" value="1" id="qty_${p.product_id}" style="width:68px;padding:6px;border-radius:6px;border:1px solid #ddd" />
+            <button class="btn" onclick="addToCart('${p.product_id}')">Add to cart</button>
+          </div>
+        </div>
+      `;
+      container.appendChild(div);
+    });
+  }
+
+  function addToCart(product_id){
+    const qtyEl = document.getElementById("qty_" + product_id);
+    const qty = Math.max(1, Number(qtyEl.value || 1));
+    // check stock
+    const prod = PRODUCTS.find(x=>x.product_id == product_id);
+    if(!prod){ alert("Product not found"); return; }
+    if(qty > prod.stock){ alert("Only " + prod.stock + " in stock"); return; }
+    CART[product_id] = (CART[product_id] || 0) + qty;
+    updateCartUI();
+    alert(prod.name + " added to cart");
+  }
+
+  function updateCartUI(){
+    const cartContents = document.getElementById("cartContents");
+    cartContents.innerHTML = "";
+    const keys = Object.keys(CART);
+    if(keys.length === 0){ cartContents.innerText = "Cart is empty"; document.getElementById("cartCount").innerText = 0; document.getElementById("cartTotal").innerText = 0; return; }
+    const ul = document.createElement("div");
+    let subtotal = 0;
+    keys.forEach(pid => {
+      const qty = CART[pid];
+      const prod = PRODUCTS.find(x=>x.product_id==pid);
+      if(!prod) return;
+      const lineTotal = qty * prod.price;
+      subtotal += lineTotal;
+      const row = document.createElement("div");
+      row.style.display = "flex";
+      row.style.justifyContent = "space-between";
+      row.style.alignItems = "center";
+      row.style.padding = "8px 0";
+      row.innerHTML = `<div><b>${escapeHtml(prod.name)}</b> <span class="sm">x ${qty}</span><div class="sm">${escapeHtml(prod.description || '')}</div></div><div>₹${lineTotal.toFixed(0)} <button style="margin-left:8px" onclick="removeFromCart('${pid}')">Remove</button></div>`;
+      ul.appendChild(row);
+    });
+    cartContents.appendChild(ul);
+    document.getElementById("cartCount").innerText = keys.length;
+    document.getElementById("cartTotal").innerText = subtotal.toFixed(0);
+    document.getElementById("subtotal").innerText = subtotal.toFixed(0);
+    updateGrandTotalDisplay();
+  }
+
+  function removeFromCart(pid){
+    delete CART[pid];
+    updateCartUI();
+  }
+
+  function openCheckout(){
+    if(Object.keys(CART).length===0){ alert("Cart is empty"); return; }
+    document.getElementById("checkoutModal").style.display = "flex";
+    // set initial totals
+    updateCartUI();
+    updateShippingOnPincode();
+  }
+  function closeCheckout(){ document.getElementById("checkoutModal").style.display = "none"; }
+
+  function getSubtotal(){
+    let s=0;
+    Object.keys(CART).forEach(pid => {
+      const p = PRODUCTS.find(x=>x.product_id==pid);
+      if(p) s += (p.price * CART[pid]);
+    });
+    return s;
+  }
+
+  function updateShippingOnPincode(){
+    const pin = (document.getElementById("custPincode").value || "").trim();
+    let shipping = 0;
+    if(pin && SHIPPING[pin] !== undefined){
+      shipping = Number(SHIPPING[pin]);
+      document.getElementById("shippingInfo").innerText = "Shipping: ₹" + shipping.toFixed(0) + " (based on pincode rules)";
+    } else {
+      document.getElementById("shippingInfo").innerText = (pin ? "Shipping rule not found for this pincode; default shipping will apply" : "Enter pincode to calculate shipping");
+    }
+    const subtotal = getSubtotal();
+    document.getElementById("subtotal").innerText = subtotal.toFixed(0);
+    const grand = subtotal + shipping;
+    document.getElementById("grandTotal").innerText = grand.toFixed(0);
+  }
+  function updateGrandTotalDisplay(){
+    updateShippingOnPincode();
+  }
+
+  // PLACE ORDER: either COD (submit Google Form) or Razorpay (create order via Apps Script then open checkout)
+  async function placeOrder(){
+    const name = document.getElementById("custName").value.trim();
+    const phone = document.getElementById("custPhone").value.trim();
+    const pincode = document.getElementById("custPincode").value.trim();
+    //const pmethod = document.getElementById("paymentMethod").value;
+    const note = document.getElementById("orderNote").value || "";
+    if(!name || !phone || phone.length<10){ alert("Please enter name and valid whatsapp number"); return; }
+    if(!pincode || pincode.length<6){ if(!confirm("Pincode missing or invalid. Proceed?")) return; }
+
+    // compute totals
+    const subtotal = getSubtotal();
+    const shipping = (SHIPPING[pincode] !== undefined ? Number(SHIPPING[pincode]) : 0);
+    const total = subtotal + shipping;
+
+    // build order items string
+    const itemsArr = [];
+    Object.keys(CART).forEach(pid=>{
+      const p = PRODUCTS.find(x=>x.product_id==pid);
+      if(p) itemsArr.push(`${p.name} x${CART[pid]} (₹${(p.price * CART[pid]).toFixed(0)})`);
+    });
+    const itemsStr = itemsArr.join(" | ");
+
+    // If COD -> submit to Google Form (orders sheet)
+    if(pmethod === "cod"){
+      if(!ORDER_FORM_URL || ORDER_FORM_URL === "YOUR_GOOGLE_FORM_POST_URL"){ alert("COD is enabled but ORDER_FORM_URL not configured in index.html"); return; }
+      // prepare form data
+      const formData = new URLSearchParams();
+      formData.append(ORDER_FORM_ENTRIES.name, name);
+      formData.append(ORDER_FORM_ENTRIES.phone, phone);
+      formData.append(ORDER_FORM_ENTRIES.pincode, pincode);
+      formData.append(ORDER_FORM_ENTRIES.items, itemsStr);
+      formData.append(ORDER_FORM_ENTRIES.subtotal, subtotal.toFixed(0));
+      //formData.append(ORDER_FORM_ENTRIES.shipping, shipping.toFixed(0));
+      formData.append(ORDER_FORM_ENTRIES.total, total.toFixed(0));
+      //formData.append(ORDER_FORM_ENTRIES.payment_method, "COD");
+      formData.append(ORDER_FORM_ENTRIES.note, note);
+
+      try{
+        // submit to Google Form
+        await fetch(ORDER_FORM_URL, { method: 'POST', mode: 'no-cors', body: formData });
+        alert("Order placed successfully. We received your order and will contact you within few hours for confirmation.");
+        CART = {}; updateCartUI(); closeCheckout();
+      }catch(err){
+        console.error(err);
+        alert("Failed to submit order to form. Check ORDER_FORM_URL.");
+      }
+      return;
+    }
+
+    // If Razorpay -> call Apps Script to create order (serverless)
+    if(pmethod === "razorpay"){
+      if(!APPS_SCRIPT_CREATE_ORDER_URL || APPS_SCRIPT_CREATE_ORDER_URL === "YOUR_APPS_SCRIPT_CREATE_ORDER_URL" || !RAZORPAY_KEY_ID || RAZORPAY_KEY_ID === "YOUR_RAZORPAY_KEY_ID"){
+        alert("Razorpay not properly configured in index.html (RAZORPAY_KEY_ID or APPS_SCRIPT_CREATE_ORDER_URL missing).");
+        return;
+      }
+      try{
+        // call your Apps Script which should create a Razorpay order and return JSON { id: "order_XXXX", amount: <in paise>, currency: "INR" }
+        const resp = await fetch(APPS_SCRIPT_CREATE_ORDER_URL, {
+          method: "POST",
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({
+            amount_inr: total, // rupees
+            name, phone, pincode, items: itemsStr, note
+          })
+        });
+        const data = await resp.json();
+        if(!data || !data.id){ console.error(data); alert("Failed to create payment order. Check Apps Script logs."); return; }
+        openRazorpayCheckout(data);
+      }catch(err){
+        console.error(err);
+        alert("Error creating payment order: " + err.message);
+      }
+    }
+  }
+
+  function openRazorpayCheckout(order){
+    // order.amount is expected in paise from server
+    const options = {
+      key: RAZORPAY_KEY_ID,
+      amount: order.amount, // paise
+      currency: order.currency || "INR",
+      name: "Tender Dry Products",
+      description: "Order payment",
+      order_id: order.id, // razorpay order id from server
+      handler: function (response){
+        // handle successful payment here
+        // response.razorpay_payment_id, response.razorpay_order_id, response.razorpay_signature
+        alert("Payment successful. Payment id: " + response.razorpay_payment_id + ". We will confirm and ship soon.");
+        // TODO: send payment confirmation to your orders sheet (via another Apps Script endpoint or Google Form)
+        CART = {}; updateCartUI(); closeCheckout();
+      },
+      prefill: {
+        name: document.getElementById("custName").value,
+        contact: document.getElementById("custPhone").value
+      },
+      theme: {color: "#1f7a6b"}
+    };
+    const rzp = new Razorpay(options);
+    rzp.on('payment.failed', function (resp){
+      alert("Payment failed: " + (resp.error && resp.error.description));
+    });
+    rzp.open();
+  }
+
+  // small sanitize
+  function escapeHtml(t){ return String(t||"").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  </script>
+</body>
+</html>
