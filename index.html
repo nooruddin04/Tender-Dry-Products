@@ -74,7 +74,8 @@
         </div>-->
         <div>
           <label>Complete address</label>
-          <input id="orderNote" type="textarea" placeholder="Write complete delivery address	" />
+          //<input id="orderNote" type="text" placeholder="Write complete delivery address	" />
+          <textarea id="orderNote" rows="5" cols="40" placeholder="Write complete delivery address	"></textarea>
         </div>
       </div>
 
@@ -319,9 +320,11 @@
       if(p) itemsArr.push(`${p.name} x${CART[pid]} (₹${(p.price * CART[pid]).toFixed(0)})`);
     });
     const itemsStr = itemsArr.join(" | ");
-
+   
     // If COD -> submit to Google Form (orders sheet)
-    if(pmethod === "cod"){
+    //if(pmethod === "cod"){
+      const a = 1;
+      if(a === 1){
       if(!ORDER_FORM_URL || ORDER_FORM_URL === "YOUR_GOOGLE_FORM_POST_URL"){ alert("COD is enabled but ORDER_FORM_URL not configured in index.html"); return; }
       // prepare form data
       const formData = new URLSearchParams();
